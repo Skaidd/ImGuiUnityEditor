@@ -1,9 +1,7 @@
 {
-    "name": "ImGuiUnityEditor",
+    "name": "ImGuiUnityEditor.OdinSerializer",
     "rootNamespace": "",
-    "references": [
-        "GUID:950d5abe1786db31526dc87b62632ff7"
-    ],
+    "references": [],
     "includePlatforms": [
         "Editor"
     ],

@@ -45,16 +45,18 @@ namespace ImGuiUnityEditor
         protected void CreateGUI()
         {
             _container = new ImGuiRendererContainer();
-            _container.OnStart += InitializeWindow;
+            _container.OnStart += OnStart;
             _container.BeforeDraw += () => Style.Begin();
             _container.OnDraw += Draw;
             _container.AfterDraw += () => Style.End();
-            _container.OnEnd += End;
+            _container.OnEnd += OnEnd;
             rootVisualElement.Add(_container);
         }
 
-        private void InitializeWindow()
+        private void OnStart()
         {
+            ImGuiUnityEditorData.instance.Load(this);
+
             wantsMouseMove = true;
             wantsMouseEnterLeaveWindow = true;
 
@@ -80,8 +82,14 @@ namespace ImGuiUnityEditor
 
             minSize = MinSize;
             maxSize = MaxSize;
-
+            
             Start();
+        }
+
+        private void OnEnd()
+        {
+            ImGuiUnityEditorData.instance.Save(this);
+            End();
         }
 
         protected void OnGUI()

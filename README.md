@@ -1,12 +1,12 @@
 # ImGuiUnityEditor
 
-A Unity Editor integration for Dear ImGui.
+ImGui for Unity Editor.
 
 ![image](https://github.com/user-attachments/assets/14f56fbb-565a-495d-aac7-02856a330bb6)
 
 ## ✨ Features
 
-- 🔌 **Unity Integration**: Seamless integration with editor windows and scene views
+- 🔌 **Unity Integration**: Integration with editor windows and scene views
 - 💾 **Serialization**: Persistent UI state and data with Odin Serializer
 
 ## 📥 Installation

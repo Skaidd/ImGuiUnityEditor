@@ -1,0 +1,11 @@
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\bin\Debug\netstandard2.0\ImGuiEditorCodeGen.deps.json
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\bin\Debug\netstandard2.0\ImGuiEditorCodeGen.dll
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\bin\Debug\netstandard2.0\ImGuiEditorCodeGen.pdb
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.csproj.AssemblyReference.cache
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.GeneratedMSBuildEditorConfig.editorconfig
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.AssemblyInfoInputs.cache
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.AssemblyInfo.cs
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.csproj.CoreCompileInputs.cache
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.sourcelink.json
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.dll
+C:\Unity Projects\URPLab\Assets\ImGuiEditor\CodeGen~\ImGuiEditorCodeGen\obj\Debug\netstandard2.0\ImGuiEditorCodeGen.pdb

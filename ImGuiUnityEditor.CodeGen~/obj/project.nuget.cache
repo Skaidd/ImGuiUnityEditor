@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "dgSpecHash": "B6VGPNsapvM=",
+  "success": true,
+  "projectFilePath": "C:\\Unity Projects\\ImGuiUnityEditor\\Assets\\ImGuiUnityEditor\\ImGuiUnityEditor.CodeGen~\\ImGuiUnityEditor.CodeGen.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\sandr\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\6.0.0\\microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.codeanalysis.analyzers\\3.3.4\\microsoft.codeanalysis.analyzers.3.3.4.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.codeanalysis.common\\4.3.0\\microsoft.codeanalysis.common.4.3.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.codeanalysis.csharp\\4.3.0\\microsoft.codeanalysis.csharp.4.3.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.codeanalysis.csharp.workspaces\\4.3.0\\microsoft.codeanalysis.csharp.workspaces.4.3.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.codeanalysis.workspaces.common\\4.3.0\\microsoft.codeanalysis.workspaces.common.4.3.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\microsoft.netcore.platforms\\1.1.0\\microsoft.netcore.platforms.1.1.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\netstandard.library\\2.0.3\\netstandard.library.2.0.3.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.buffers\\4.5.1\\system.buffers.4.5.1.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.collections.immutable\\6.0.0\\system.collections.immutable.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition\\6.0.0\\system.composition.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition.attributedmodel\\6.0.0\\system.composition.attributedmodel.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition.convention\\6.0.0\\system.composition.convention.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition.hosting\\6.0.0\\system.composition.hosting.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition.runtime\\6.0.0\\system.composition.runtime.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.composition.typedparts\\6.0.0\\system.composition.typedparts.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.io.pipelines\\6.0.3\\system.io.pipelines.6.0.3.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.memory\\4.5.4\\system.memory.4.5.4.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.numerics.vectors\\4.4.0\\system.numerics.vectors.4.4.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.reflection.metadata\\5.0.0\\system.reflection.metadata.5.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\6.0.0\\system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.text.encoding.codepages\\6.0.0\\system.text.encoding.codepages.6.0.0.nupkg.sha512",
+    "C:\\Users\\sandr\\.nuget\\packages\\system.threading.tasks.extensions\\4.5.4\\system.threading.tasks.extensions.4.5.4.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,21 @@
+{
+    "name": "com.unity.imguiunityeditor",
+    "version": "1.0.0",
+    "displayName": "ImGuiUnityEditor",
+    "description": "ImGui for Unity Editor.",
+    "unity": "2019.1",
+    "unityRelease": "0f1",
+    "documentationUrl": "https://github.com/Skaidd/ImGuiUnityEditor/blob/main/README.md",
+    "licensesUrl": "https://github.com/Skaidd/ImGuiUnityEditor/blob/main/LICENSE.md",
+    "dependencies": 
+    {
+    },
+    "keywords": [
+        "ImGui",
+        "Unity",
+        "Editor"
+    ],
+    "author": {
+        "name": "Sandro Hernandez"
+    }
+  }

@@ -26,6 +26,8 @@ Registers ImGui windows and scene overlays in the Unity Editor menu system.
 ### 🪟 ImGuiEditorWindow
 
 ```csharp
+using ImGuiUnityEditor;
+
 [ImGuiMenu("ImGui/ExampleWindow")]
 public class MyCustomWindow : ImGuiEditorWindow
 {
@@ -43,6 +45,9 @@ Base class for creating ImGui-powered editor windows.
 ### 🎬 ImGuiSceneView
 
 ```csharp
+using ImGuiUnityEditor;
+using UnityEditor;
+
 [ImGuiMenu("ImGui/ExampleSceneOverlay")]
 public class MySceneOverlay : ImGuiSceneView
 {

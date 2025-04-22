@@ -138,6 +138,7 @@ namespace ImGuiUnityEditor
                     element.SetContainer(imguiRendererContainer);
                     var _hasMenuAttribute = element.GetType().GetCustomAttributes(typeof(ImGuiMenuAttribute), false).Length > 0;
                     element.IsEnabled = !_hasMenuAttribute;
+                    EditorApplication.delayCall += () => UpdateMenuCheckmark(element, element.IsEnabled);
                 }
 
                 _sceneViewRenderers.Add(view, imguiRendererContainer);

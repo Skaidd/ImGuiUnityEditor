@@ -37,14 +37,15 @@ namespace ImGuiUnityEditor
         /// <summary>
         /// The style for the ImGui object
         /// </summary>
-        public ImGuiObjectStyle Style { get; set; } = new();
+        public ImGuiObjectStyle Style { get; set; }
 
         private ImGuiRendererContainer _container;
         ImGuiRendererContainer IImGuiObject.Container => _container;
 
         protected void CreateGUI()
         {
-            _container = new ImGuiRendererContainer();
+            _container = new ImGuiRendererContainer(); 
+            Style = new ImGuiObjectStyle();
             _container.OnStart += OnStart;
             _container.BeforeDraw += () => Style.Begin();
             _container.OnDraw += Draw;

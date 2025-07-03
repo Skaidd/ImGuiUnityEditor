@@ -21,8 +21,7 @@ namespace ImGuiUnityEditor
         {
             if (texture != null)
             {
-                IntPtr textureId = (IntPtr)texture.GetInstanceID();
-                ImGui.Image(new ImTextureID(textureId), new Vector2(size.x, size.y),
+                ImGui.Image(texture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1);
             }
             else
@@ -42,8 +41,7 @@ namespace ImGuiUnityEditor
         {
             if (renderTexture != null)
             {
-                IntPtr textureId = (IntPtr)renderTexture.GetInstanceID();
-                ImGui.ImageWithBg(new ImTextureID(textureId), new Vector2(size.x, size.y),
+                ImGui.ImageWithBg(renderTexture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1);
             }
             else
@@ -64,8 +62,7 @@ namespace ImGuiUnityEditor
         {
             if (sprite != null)
             {
-                IntPtr textureId = (IntPtr)sprite.texture.GetInstanceID();
-                ImGui.ImageWithBg(new ImTextureID(textureId), new Vector2(size.x, size.y),
+                ImGui.ImageWithBg(sprite.texture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1);
             }
             else
@@ -85,9 +82,8 @@ namespace ImGuiUnityEditor
         {
             if (texture != null)
             {
-                IntPtr textureId = (IntPtr)texture.GetInstanceID();
                 ImGui.ImageButton($"##{texture.name}_button",
-                new ImTextureID(textureId), new Vector2(size.x, size.y),
+                texture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1,
                 backgroundColor == default ? Color.black : backgroundColor,
                 tintColor == default ? Color.white : tintColor);
@@ -110,9 +106,8 @@ namespace ImGuiUnityEditor
         {
             if (renderTexture != null)
             {
-                IntPtr textureId = (IntPtr)renderTexture.GetInstanceID();
                 ImGui.ImageButton($"##{renderTexture.name}_button",
-                new ImTextureID(textureId), new Vector2(size.x, size.y),
+                renderTexture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1,
                 backgroundColor == default ? Color.black : backgroundColor,
                 tintColor == default ? Color.white : tintColor);
@@ -136,9 +131,8 @@ namespace ImGuiUnityEditor
         {
             if (sprite != null)
             {
-                IntPtr textureId = (IntPtr)sprite.texture.GetInstanceID();
                 ImGui.ImageButton($"##{sprite.name}_button",
-                new ImTextureID(textureId), new Vector2(size.x, size.y),
+                sprite.texture.ImTextureRef(), new Vector2(size.x, size.y),
                 uv0 == default ? new Vector2(1, 1) : uv0, uv1 == default ? new Vector2(0, 0) : uv1,
                 backgroundColor == default ? Color.black : backgroundColor,
                 tintColor == default ? Color.white : tintColor);

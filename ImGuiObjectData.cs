@@ -13,14 +13,12 @@ namespace ImGuiUnityEditor
         [field: SerializeField] public string Name { get; private set; }
         [field: SerializeField] public string ImGuiData { get; private set; }
         [field: SerializeField] public string FieldsData { get; private set; }
-        [field: SerializeField] public ImGuiObjectStyle StyleData { get; private set; }
 
         public ImGuiObjectData(string name, string data = null)
         {
             Name = name;
             ImGuiData = data ?? string.Empty;
             FieldsData = string.Empty;
-            StyleData = new ImGuiObjectStyle();
         }
         
         /// <summary>
@@ -30,8 +28,6 @@ namespace ImGuiUnityEditor
         {
             ImGuiData = imGuiObject.Container.SaveSettings();
             FieldsData = ImGuiObjectFieldSerializer.SerializeFields(imGuiObject);
-            StyleData = imGuiObject.Style;
-            
         }
 
         /// <summary>
@@ -44,11 +40,6 @@ namespace ImGuiUnityEditor
 
             if (!string.IsNullOrEmpty(FieldsData))
                 ImGuiObjectFieldSerializer.DeserializeFields(FieldsData, imGuiObject);
-
-            if (StyleData != null)
-            {
-                imGuiObject.Style = StyleData;
-            }
         }
     }
 }

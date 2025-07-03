@@ -6,7 +6,7 @@ namespace ImGuiUnityEditor
         /// <summary>
         /// The style for the ImGui object
         /// </summary>
-        public ImGuiObjectStyle Style { get; set; } = new();
+        public ImGuiObjectStyle Style { get; set; }
 
         private ImGuiRendererContainer _container;
         ImGuiRendererContainer IImGuiObject.Container => _container;
@@ -23,6 +23,7 @@ namespace ImGuiUnityEditor
         internal void SetContainer(ImGuiRendererContainer container)
         {
             _container = container;
+            Style = new ImGuiObjectStyle();
             _container.OnStart += () => ImGuiUnityEditorData.instance.Load(this);
             _container.OnDraw += OnDraw;
             _container.OnEnd += () => ImGuiUnityEditorData.instance.Save(this);

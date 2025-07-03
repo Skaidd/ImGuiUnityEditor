@@ -5,7 +5,7 @@ namespace ImGuiUnityEditor
     public static class ImGuiExtensionMethods
     {
         /// <summary>
-        /// Get the font
+        /// Get the font with specified name
         /// </summary>
         /// <param name="io">The ImGui IO.</param>
         /// <param name="fontName">The name of the font to get.</param>
@@ -23,7 +23,7 @@ namespace ImGuiUnityEditor
             Debug.LogError($"Font '{fontName}' not found");
             return io.Fonts[0];
         }
-
+    
         /// <summary>
         /// Get the name of the font.
         /// </summary>
@@ -31,10 +31,22 @@ namespace ImGuiUnityEditor
         /// <returns>The name of the font.</returns>
         public static string Name(this ImFontPtr font)
         {
-            string fn = font.GetDebugNameS();
-            if (fn.Contains(",")) fn = fn[..fn.IndexOf(",")].Trim();
-            if (fn.Contains(".")) fn = fn[..fn.LastIndexOf(".")];
-            return fn;
+            string name = font.GetDebugNameS();
+            int ttfIndex = name.IndexOf(".ttf");
+            return ttfIndex >= 0 ? name[..ttfIndex] : name;
+        }
+
+        /// <summary>
+        /// Get ImTextureRef from unity texture.
+        /// </summary>
+        /// <param name="texture">The texture to get the reference of.</param>
+        /// <returns>The texture reference.</returns>
+        public static ImTextureRef ImTextureRef(this Texture texture)
+        {
+            return new ImTextureRef
+            {
+                TexID = new ImTextureID(texture.GetInstanceID())
+            };
         }
     }
 }

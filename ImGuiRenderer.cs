@@ -97,7 +97,6 @@ namespace ImGuiUnityEditor
                 //* Setup ImGuizmo
                 ImGuizmo.SetImGuiContext(_imGuiContext);
 
-                //* Initialize IO
                 IO = ImGui.GetIO();
 
                 //* Set up ImGui configuration
@@ -119,7 +118,6 @@ namespace ImGuiUnityEditor
                 io.IniFilename = (byte*)IntPtr.Zero;
                 io.LogFilename = (byte*)IntPtr.Zero;
 
-                //* Setup fonts using the new 1.92 approach
                 SetupFonts();
             }
             catch (Exception e)
@@ -143,14 +141,11 @@ namespace ImGuiUnityEditor
         public unsafe void LoadAllFonts()
         {
             IO.Fonts.AddFontDefault();
-
-            // Load custom fonts with DPI scaling
-            var fontAssets = AssetDatabase.FindAssets("t:Font", new[] { "Assets" });
+            var fontAssets = Resources.LoadAll<Font>("");
             foreach (var fontAsset in fontAssets)
             {
-                var fontAssetPath = AssetDatabase.GUIDToAssetPath(fontAsset);
-                var font = AssetDatabase.LoadAssetAtPath<Font>(fontAssetPath);
-                IO.Fonts.AddFontFromFileTTF(fontAssetPath, font.fontSize);
+                var fontPath = AssetDatabase.GetAssetPath(fontAsset);
+                IO.Fonts.AddFontFromFileTTF(fontPath, fontAsset.fontSize);
             }
         }
 
@@ -169,7 +164,6 @@ namespace ImGuiUnityEditor
                 unityTexture.hideFlags = HideFlags.HideAndDontSave;
 #endif
 
-                // Get pixel data from ImGui
                 var pixels = tex.GetPixels();
                 byte[] data = new byte[tex.Width * tex.Height * tex.BytesPerPixel];
                 Marshal.Copy((IntPtr)pixels, data, 0, data.Length);
@@ -182,71 +176,54 @@ namespace ImGuiUnityEditor
             }
             else if (tex.Status == ImTextureStatus.WantUpdates)
             {
-                // Update existing texture regions
                 var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
                 if (unityTexture != null)
                 {
-                    // Process each update rectangle
                     var updates = tex.Updates;
                     for (int i = 0; i < updates.Size; i++)
                     {
                         var r = updates[i];
 
-                        // Copy region data row by row (similar to OpenGL ES path in official backend)
-                        // This handles cases where GetPixelsAt might not return a contiguous region
                         int srcPitch = r.W * tex.BytesPerPixel;
                         byte[] regionData = new byte[r.H * srcPitch];
 
-                        // Copy each row of the region
                         for (int y = 0; y < r.H; y++)
                         {
                             var rowPixels = tex.GetPixelsAt(r.X, r.Y + y);
                             Marshal.Copy((IntPtr)rowPixels, regionData, y * srcPitch, srcPitch);
                         }
 
-                        // Convert to Color32 array for Unity
                         var colors = new Color32[r.W * r.H];
                         for (int j = 0; j < colors.Length; j++)
                         {
                             int idx = j * 4;
                             colors[j] = new Color32(
-                                regionData[idx],     // R
-                                regionData[idx + 1], // G
-                                regionData[idx + 2], // B
-                                regionData[idx + 3]  // A
+                                regionData[idx],     
+                                regionData[idx + 1], 
+                                regionData[idx + 2], 
+                                regionData[idx + 3] 
                             );
                         }
 
-                        // Apply the region to Unity texture
                         unityTexture.SetPixels32(r.X, r.Y, r.W, r.H, colors);
                     }
 
-                    unityTexture.Apply(false); // Apply all changes at once
+                    unityTexture.Apply(false);
                     tex.SetStatus(ImTextureStatus.Ok);
                 }
             }
             else if (tex.Status == ImTextureStatus.WantDestroy && tex.UnusedFrames > 0)
             {
-                DestroyTexture(tex);
+                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
+                if (unityTexture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(unityTexture);
+                }
+
+                tex.SetTexID(new ImTextureID(0));
+                tex.SetStatus(ImTextureStatus.Destroyed);
             }
         }
-
-        /// <summary>
-        /// Helper method to destroy a texture
-        /// </summary>
-        private void DestroyTexture(ImTextureDataPtr tex)
-        {
-            var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
-            if (unityTexture != null)
-            {
-                UnityEngine.Object.DestroyImmediate(unityTexture);
-            }
-
-            // Clear identifiers and mark as destroyed
-            tex.SetTexID(new ImTextureID(0)); // Equivalent to ImTextureID_Invalid
-            tex.SetStatus(ImTextureStatus.Destroyed);
-        }
-
 
         /// <summary>
         /// Sets up the ImGui context.
@@ -290,24 +267,19 @@ namespace ImGuiUnityEditor
         {
             if (size.x >= 0 && size.y >= 0)
             {
-                // Get current DPI scale
 #if UNITY_EDITOR
                 float dpiScale = UnityEditor.EditorGUIUtility.pixelsPerPoint;
 #else
                 float dpiScale = Screen.dpi / 96.0f;
 #endif
 
-                // Set logical display size (what ImGui uses for layout)
                 IO.DisplaySize = size;
 
-                // Set framebuffer scale (used by renderer for physical pixel calculations)
                 IO.DisplayFramebufferScale = new Vector2(dpiScale, dpiScale);
 
-                // Calculate physical render target size
                 int physicalWidth = Mathf.RoundToInt(size.x * dpiScale);
                 int physicalHeight = Mathf.RoundToInt(size.y * dpiScale);
 
-                // Resize render texture if needed
                 if (_renderTexture != null &&
                     (_renderTexture.width != physicalWidth || _renderTexture.height != physicalHeight))
                 {
@@ -508,11 +480,9 @@ namespace ImGuiUnityEditor
             int totalVtxCount = drawData.TotalVtxCount;
             int totalIdxCount = drawData.TotalIdxCount;
 
-            // Early out if nothing to draw
             if (totalVtxCount == 0 || totalIdxCount == 0)
                 return;
 
-            // Count total number of draw commands for arguments buffer
             int drawArgCount = 0;
             for (int n = 0; n < drawData.CmdListsCount; n++)
                 drawArgCount += drawData.CmdLists[n].CmdBuffer.Size;
@@ -534,7 +504,6 @@ namespace ImGuiUnityEditor
             {
                 ImDrawListPtr cmdList = drawData.CmdLists[n];
 
-                // Create native arrays from the ImDrawVert and index buffers (zero-copy)
                 var vtxArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ImDrawVert>(
                     cmdList.VtxBuffer.Data, cmdList.VtxBuffer.Size, Allocator.None);
                 var idxArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ushort>(
@@ -544,25 +513,21 @@ namespace ImGuiUnityEditor
                 NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref vtxArray, AtomicSafetyHandle.GetTempMemoryHandle());
                 NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref idxArray, AtomicSafetyHandle.GetTempMemoryHandle());
 #endif
-                // Upload vertex/index data
                 _vertexBuffer.SetData(vtxArray, 0, vtxOffset, vtxArray.Length);
                 _indexBuffer.SetData(idxArray, 0, idxOffset, idxArray.Length);
 
-                // Prepare arguments for DrawProceduralIndirect
-                drawArgs[1] = 1;                           // instance count
-                drawArgs[3] = vtxOffset;                   // base vertex location
-                drawArgs[4] = 0;                           // base instance location
+                drawArgs[1] = 1;                           
+                drawArgs[3] = vtxOffset;                   
+                drawArgs[4] = 0;                           
 
-                // Process all draw commands in this list
                 for (int i = 0; i < cmdList.CmdBuffer.Size; i++)
                 {
                     var cmd = cmdList.CmdBuffer[i];
-                    drawArgs[0] = (int)cmd.ElemCount;      // index count per instance
-                    drawArgs[2] = idxOffset + (int)cmd.IdxOffset; // start index location
+                    drawArgs[0] = (int)cmd.ElemCount;      
+                    drawArgs[2] = idxOffset + (int)cmd.IdxOffset; 
 
-                    // Upload draw arguments
                     _argsBuffer.SetData(drawArgs, 0, argsOffset, 5);
-                    argsOffset += 5;                       // 5 ints for each cmd
+                    argsOffset += 5;                       
                 }
 
                 vtxOffset += vtxArray.Length;
@@ -680,18 +645,6 @@ namespace ImGuiUnityEditor
                     UnityEngine.Object.DestroyImmediate(_renderTexture);
                     _renderTexture = null;
                 }
-
-
-                // Destroy all managed textures (matches official OpenGL backend)
-                // var platformTextures = ImGui.GetPlatformIO().Textures;
-                // for (int i = 0; i < platformTextures.Size; i++)
-                // {
-                //     var tex = platformTextures[i];
-                //     if (tex.RefCount == 1)
-                //     {
-                //         DestroyTexture(tex);
-                //     }
-                // }
 
                 //* Release ImPlot context
                 ImPlot.SetCurrentContext(null);

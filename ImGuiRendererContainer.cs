@@ -53,6 +53,12 @@ namespace ImGuiUnityEditor
         {
             _renderer = new ImGuiRenderer();
             _renderer.SetInputHandler<ImGuiEditorInputHandler>();
+
+            if (UnityEditor.EditorGUIUtility.isProSkin)
+                _renderer.SetStyle<ImGuiDarkStyle>();
+            else
+                _renderer.SetStyle<ImGuiLightStyle>();
+            
             OnStart?.Invoke();
         }
 

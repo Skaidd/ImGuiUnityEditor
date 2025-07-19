@@ -33,7 +33,6 @@ namespace ImGuiUnityEditor
         // Rendering resources
         private readonly CommandBuffer _cmd;
         private Material _material;
-        private Texture2D _fontTexture;
         private readonly MaterialPropertyBlock _materialPropertyBlock;
         private RenderTexture _renderTexture;
 
@@ -44,9 +43,8 @@ namespace ImGuiUnityEditor
         public ImGuiRendererInputHandler InputHandler { get; private set; }
 
         /// <summary>
-        /// Initializes the ImGui renderer.
+        /// Initializes the ImGui renderer
         /// </summary>
-        /// <param name="initialSize">The initial size of the rendering surface.</param>
         public unsafe ImGuiRenderer()
         {
             try
@@ -75,7 +73,6 @@ namespace ImGuiUnityEditor
 #if UNITY_EDITOR
                 _renderTexture.hideFlags = HideFlags.HideAndDontSave;
 #endif
-
                 _renderTexture.Create();
 
                 //* Create material property block
@@ -103,12 +100,16 @@ namespace ImGuiUnityEditor
                 //* Initialize IO
                 IO = ImGui.GetIO();
 
-                //* Set up ImGui Default configuration
+                //* Set up ImGui configuration
                 IO.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
+                IO.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
                 IO.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
                 IO.ConfigFlags |= ImGuiConfigFlags.NavEnableGamepad;
                 IO.ConfigFlags |= ImGuiConfigFlags.DockingEnable;
                 IO.ConfigInputTextCursorBlink = true;
+                IO.ConfigErrorRecovery = true;
+                IO.ConfigErrorRecoveryEnableAssert = false;
+                IO.ConfigErrorRecoveryEnableTooltip = true;
 
                 //* Set Initial display size
                 IO.DisplaySize = new(1, 1);
@@ -118,7 +119,7 @@ namespace ImGuiUnityEditor
                 io.IniFilename = (byte*)IntPtr.Zero;
                 io.LogFilename = (byte*)IntPtr.Zero;
 
-                //* Setup fonts
+                //* Setup fonts using the new 1.92 approach
                 SetupFonts();
             }
             catch (Exception e)
@@ -129,61 +130,123 @@ namespace ImGuiUnityEditor
         }
 
         /// <summary>
-        /// Sets up the fonts.
+        /// Sets up the fonts
         /// </summary>
         private unsafe void SetupFonts()
         {
             LoadAllFonts();
-            CreateFontTexture();
         }
 
         /// <summary>
-        /// Loads all fonts from the Assets folder.
+        /// Loads all fonts
         /// </summary>
         public unsafe void LoadAllFonts()
         {
-            //* Add the default font first
             IO.Fonts.AddFontDefault();
 
-            //* Load all fonts from the Assets folder
+            // Load custom fonts with DPI scaling
             var fontAssets = AssetDatabase.FindAssets("t:Font", new[] { "Assets" });
             foreach (var fontAsset in fontAssets)
             {
                 var fontAssetPath = AssetDatabase.GUIDToAssetPath(fontAsset);
-                var font = AssetDatabase.LoadAssetAtPath<Font>(fontAssetPath);   
+                var font = AssetDatabase.LoadAssetAtPath<Font>(fontAssetPath);
                 IO.Fonts.AddFontFromFileTTF(fontAssetPath, font.fontSize);
             }
-
-            IO.Fonts.Build();
         }
 
         /// <summary>
-        /// Creates the font texture used by ImGui.
+        /// Updates texture data
         /// </summary>
-        private unsafe void CreateFontTexture()
+        private unsafe void UpdateTexture(ImTextureDataPtr tex)
         {
-            byte* pixels = null;
-            int width = 0, height = 0, bytesPerPixel = 0;
-            IO.Fonts.GetTexDataAsRGBA32(&pixels, &width, &height, &bytesPerPixel);
-
-            _fontTexture = new Texture2D(width, height, TextureFormat.RGBA32, false, true);
-            _fontTexture.filterMode = FilterMode.Bilinear;
-            _fontTexture.wrapMode = TextureWrapMode.Clamp;
-            _fontTexture.anisoLevel = 1;
+            if (tex.Status == ImTextureStatus.WantCreate)
+            {
+                var unityTexture = new Texture2D(tex.Width, tex.Height, TextureFormat.RGBA32, false, true);
+                unityTexture.filterMode = FilterMode.Bilinear;
+                unityTexture.wrapMode = TextureWrapMode.Clamp;
+                unityTexture.anisoLevel = 1;
 #if UNITY_EDITOR
-            _fontTexture.hideFlags = HideFlags.HideAndDontSave;
+                unityTexture.hideFlags = HideFlags.HideAndDontSave;
 #endif
 
-            byte[] data = new byte[width * height * bytesPerPixel];
-            Marshal.Copy((IntPtr)pixels, data, 0, data.Length);
+                // Get pixel data from ImGui
+                var pixels = tex.GetPixels();
+                byte[] data = new byte[tex.Width * tex.Height * tex.BytesPerPixel];
+                Marshal.Copy((IntPtr)pixels, data, 0, data.Length);
 
-            _fontTexture.LoadRawTextureData(data);
-            _fontTexture.Apply(true);
+                unityTexture.LoadRawTextureData(data);
+                unityTexture.Apply(false);
 
-            IO.Fonts.SetTexID(new ImTextureID(_fontTexture.GetInstanceID()));
+                tex.SetTexID(new ImTextureID(unityTexture.GetInstanceID()));
+                tex.SetStatus(ImTextureStatus.Ok);
+            }
+            else if (tex.Status == ImTextureStatus.WantUpdates)
+            {
+                // Update existing texture regions
+                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
+                if (unityTexture != null)
+                {
+                    // Process each update rectangle
+                    var updates = tex.Updates;
+                    for (int i = 0; i < updates.Size; i++)
+                    {
+                        var r = updates[i];
 
-            IO.Fonts.ClearTexData();
+                        // Copy region data row by row (similar to OpenGL ES path in official backend)
+                        // This handles cases where GetPixelsAt might not return a contiguous region
+                        int srcPitch = r.W * tex.BytesPerPixel;
+                        byte[] regionData = new byte[r.H * srcPitch];
+
+                        // Copy each row of the region
+                        for (int y = 0; y < r.H; y++)
+                        {
+                            var rowPixels = tex.GetPixelsAt(r.X, r.Y + y);
+                            Marshal.Copy((IntPtr)rowPixels, regionData, y * srcPitch, srcPitch);
+                        }
+
+                        // Convert to Color32 array for Unity
+                        var colors = new Color32[r.W * r.H];
+                        for (int j = 0; j < colors.Length; j++)
+                        {
+                            int idx = j * 4;
+                            colors[j] = new Color32(
+                                regionData[idx],     // R
+                                regionData[idx + 1], // G
+                                regionData[idx + 2], // B
+                                regionData[idx + 3]  // A
+                            );
+                        }
+
+                        // Apply the region to Unity texture
+                        unityTexture.SetPixels32(r.X, r.Y, r.W, r.H, colors);
+                    }
+
+                    unityTexture.Apply(false); // Apply all changes at once
+                    tex.SetStatus(ImTextureStatus.Ok);
+                }
+            }
+            else if (tex.Status == ImTextureStatus.WantDestroy && tex.UnusedFrames > 0)
+            {
+                DestroyTexture(tex);
+            }
         }
+
+        /// <summary>
+        /// Helper method to destroy a texture
+        /// </summary>
+        private void DestroyTexture(ImTextureDataPtr tex)
+        {
+            var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
+            if (unityTexture != null)
+            {
+                UnityEngine.Object.DestroyImmediate(unityTexture);
+            }
+
+            // Clear identifiers and mark as destroyed
+            tex.SetTexID(new ImTextureID(0)); // Equivalent to ImTextureID_Invalid
+            tex.SetStatus(ImTextureStatus.Destroyed);
+        }
+
 
         /// <summary>
         /// Sets up the ImGui context.
@@ -193,7 +256,7 @@ namespace ImGuiUnityEditor
             ImGui.SetCurrentContext(_imGuiContext);
             ImPlot.SetCurrentContext(_imPlotContext);
             ImNodes.SetCurrentContext(_imNodesContext);
-            
+
             ImPlot.SetImGuiContext(_imGuiContext);
             ImNodes.SetImGuiContext(_imGuiContext);
             ImGuizmo.SetImGuiContext(_imGuiContext);
@@ -210,37 +273,47 @@ namespace ImGuiUnityEditor
         }
 
         /// <summary>
-        /// Resizes the ImGui display.
+        /// Sets the input handler.
         /// </summary>
-        /// <param name="size">The new size.</param>
+        /// <param name="inputHandler">The input handler.</param>
+        public void SetInputHandler(ImGuiRendererInputHandler inputHandler)
+        {
+            InputHandler = inputHandler;
+            InputHandler.SetIO(IO);
+        }
+
+        /// <summary>
+        /// Resizes the ImGui display with proper DPI handling
+        /// </summary>
+        /// <param name="size">The logical size (not physical pixels)</param>
         private void Resize(Vector2 size)
         {
             if (size.x >= 0 && size.y >= 0)
             {
+                // Get current DPI scale
 #if UNITY_EDITOR
                 float dpiScale = UnityEditor.EditorGUIUtility.pixelsPerPoint;
 #else
-                float dpiScale = Screen.dpi;
+                float dpiScale = Screen.dpi / 96.0f;
 #endif
+
+                // Set logical display size (what ImGui uses for layout)
                 IO.DisplaySize = size;
+
+                // Set framebuffer scale (used by renderer for physical pixel calculations)
                 IO.DisplayFramebufferScale = new Vector2(dpiScale, dpiScale);
 
-                //Calculate physical size with DPI scaling
+                // Calculate physical render target size
                 int physicalWidth = Mathf.RoundToInt(size.x * dpiScale);
                 int physicalHeight = Mathf.RoundToInt(size.y * dpiScale);
 
-                // Check if render texture needs to be resized
+                // Resize render texture if needed
                 if (_renderTexture != null &&
                     (_renderTexture.width != physicalWidth || _renderTexture.height != physicalHeight))
                 {
-                    // Release old texture
                     _renderTexture.Release();
-
-                    // Update dimensions using physical size
                     _renderTexture.width = Mathf.Max(1, physicalWidth);
                     _renderTexture.height = Mathf.Max(1, physicalHeight);
-
-                    // Recreate with new size
                     _renderTexture.Create();
                 }
             }
@@ -279,7 +352,7 @@ namespace ImGuiUnityEditor
         /// <summary>
         /// Begins a new ImGui frame.
         /// </summary>
-        /// <param name="size">The size of the ImGui display.</param>
+        /// <param name="size">The logical size of the ImGui display.</param>
         public void Begin(Vector2 size)
         {
             SetupContext();
@@ -316,6 +389,114 @@ namespace ImGuiUnityEditor
             if (string.IsNullOrEmpty(iniData)) { return; }
             SetupContext();
             ImGui.LoadIniSettingsFromMemory(iniData);
+        }
+
+        public void SetStyle<T>() where T : ImGuiObjectStyle, new()
+        {
+            var style = new T();
+            SetStyle(style);
+        }
+
+        public void SetStyle(ImGuiObjectStyle style)
+        {
+            var currentStyle = ImGui.GetStyle();
+
+            IO.FontDefault = IO.Fonts.GetFont(style.FontName) != default(ImFontPtr) ? IO.Fonts.GetFont(style.FontName) : IO.FontDefault;
+
+            currentStyle.Alpha = style.Alpha != default ? style.Alpha : currentStyle.Alpha;
+            currentStyle.DisabledAlpha = style.DisabledAlpha != default ? style.DisabledAlpha : currentStyle.DisabledAlpha;
+            currentStyle.WindowPadding = style.WindowPadding != default ? style.WindowPadding : currentStyle.WindowPadding;
+            currentStyle.WindowRounding = style.WindowRounding != default ? style.WindowRounding : currentStyle.WindowRounding;
+            currentStyle.WindowBorderSize = style.WindowBorderSize != default ? style.WindowBorderSize : currentStyle.WindowBorderSize;
+            currentStyle.WindowMinSize = style.WindowMinSize != default ? style.WindowMinSize : currentStyle.WindowMinSize;
+            currentStyle.WindowTitleAlign = style.WindowTitleAlign != default ? style.WindowTitleAlign : currentStyle.WindowTitleAlign;
+            currentStyle.ChildRounding = style.ChildRounding != default ? style.ChildRounding : currentStyle.ChildRounding;
+            currentStyle.ChildBorderSize = style.ChildBorderSize != default ? style.ChildBorderSize : currentStyle.ChildBorderSize;
+            currentStyle.PopupRounding = style.PopupRounding != default ? style.PopupRounding : currentStyle.PopupRounding;
+            currentStyle.PopupBorderSize = style.PopupBorderSize != default ? style.PopupBorderSize : currentStyle.PopupBorderSize;
+            currentStyle.FramePadding = style.FramePadding != default ? style.FramePadding : currentStyle.FramePadding;
+            currentStyle.FrameRounding = style.FrameRounding != default ? style.FrameRounding : currentStyle.FrameRounding;
+            currentStyle.FrameBorderSize = style.FrameBorderSize != default ? style.FrameBorderSize : currentStyle.FrameBorderSize;
+            currentStyle.ItemSpacing = style.ItemSpacing != default ? style.ItemSpacing : currentStyle.ItemSpacing;
+            currentStyle.ItemInnerSpacing = style.ItemInnerSpacing != default ? style.ItemInnerSpacing : currentStyle.ItemInnerSpacing;
+            currentStyle.IndentSpacing = style.IndentSpacing != default ? style.IndentSpacing : currentStyle.IndentSpacing;
+            currentStyle.CellPadding = style.CellPadding != default ? style.CellPadding : currentStyle.CellPadding;
+            currentStyle.ScrollbarSize = style.ScrollbarSize != default ? style.ScrollbarSize : currentStyle.ScrollbarSize;
+            currentStyle.ScrollbarRounding = style.ScrollbarRounding != default ? style.ScrollbarRounding : currentStyle.ScrollbarRounding;
+            currentStyle.GrabMinSize = style.GrabMinSize != default ? style.GrabMinSize : currentStyle.GrabMinSize;
+            currentStyle.GrabRounding = style.GrabRounding != default ? style.GrabRounding : currentStyle.GrabRounding;
+            currentStyle.ImageBorderSize = style.ImageBorderSize != default ? style.ImageBorderSize : currentStyle.ImageBorderSize;
+            currentStyle.TabRounding = style.TabRounding != default ? style.TabRounding : currentStyle.TabRounding;
+            currentStyle.TabBorderSize = style.TabBorderSize != default ? style.TabBorderSize : currentStyle.TabBorderSize;
+            currentStyle.TabBarBorderSize = style.TabBarBorderSize != default ? style.TabBarBorderSize : currentStyle.TabBarBorderSize;
+            currentStyle.TabBarOverlineSize = style.TabBarOverlineSize != default ? style.TabBarOverlineSize : currentStyle.TabBarOverlineSize;
+            currentStyle.TableAngledHeadersAngle = style.TableAngledHeadersAngle != default ? style.TableAngledHeadersAngle : currentStyle.TableAngledHeadersAngle;
+            currentStyle.TableAngledHeadersTextAlign = style.TableAngledHeadersTextAlign != default ? style.TableAngledHeadersTextAlign : currentStyle.TableAngledHeadersTextAlign;
+            currentStyle.ButtonTextAlign = style.ButtonTextAlign != default ? style.ButtonTextAlign : currentStyle.ButtonTextAlign;
+            currentStyle.SelectableTextAlign = style.SelectableTextAlign != default ? style.SelectableTextAlign : currentStyle.SelectableTextAlign;
+            currentStyle.SeparatorTextBorderSize = style.SeparatorTextBorderSize != default ? style.SeparatorTextBorderSize : currentStyle.SeparatorTextBorderSize;
+            currentStyle.SeparatorTextAlign = style.SeparatorTextAlign != default ? style.SeparatorTextAlign : currentStyle.SeparatorTextAlign;
+            currentStyle.SeparatorTextPadding = style.SeparatorTextPadding != default ? style.SeparatorTextPadding : currentStyle.SeparatorTextPadding;
+            currentStyle.DockingSeparatorSize = style.DockingSeparatorSize != default ? style.DockingSeparatorSize : currentStyle.DockingSeparatorSize;
+
+            currentStyle.Colors[(int)ImGuiCol.Text] = style.TextColor != default ? style.TextColor : currentStyle.Colors[(int)ImGuiCol.Text];
+            currentStyle.Colors[(int)ImGuiCol.TextDisabled] = style.TextDisabledColor != default ? style.TextDisabledColor : currentStyle.Colors[(int)ImGuiCol.TextDisabled];
+            currentStyle.Colors[(int)ImGuiCol.WindowBg] = style.WindowBgColor != default ? style.WindowBgColor : currentStyle.Colors[(int)ImGuiCol.WindowBg];
+            currentStyle.Colors[(int)ImGuiCol.ChildBg] = style.ChildBgColor != default ? style.ChildBgColor : currentStyle.Colors[(int)ImGuiCol.ChildBg];
+            currentStyle.Colors[(int)ImGuiCol.PopupBg] = style.PopupBgColor != default ? style.PopupBgColor : currentStyle.Colors[(int)ImGuiCol.PopupBg];
+            currentStyle.Colors[(int)ImGuiCol.Border] = style.BorderColor != default ? style.BorderColor : currentStyle.Colors[(int)ImGuiCol.Border];
+            currentStyle.Colors[(int)ImGuiCol.BorderShadow] = style.BorderShadowColor != default ? style.BorderShadowColor : currentStyle.Colors[(int)ImGuiCol.BorderShadow];
+            currentStyle.Colors[(int)ImGuiCol.FrameBg] = style.FrameBgColor != default ? style.FrameBgColor : currentStyle.Colors[(int)ImGuiCol.FrameBg];
+            currentStyle.Colors[(int)ImGuiCol.FrameBgHovered] = style.FrameBgHoveredColor != default ? style.FrameBgHoveredColor : currentStyle.Colors[(int)ImGuiCol.FrameBgHovered];
+            currentStyle.Colors[(int)ImGuiCol.FrameBgActive] = style.FrameBgActiveColor != default ? style.FrameBgActiveColor : currentStyle.Colors[(int)ImGuiCol.FrameBgActive];
+            currentStyle.Colors[(int)ImGuiCol.TitleBg] = style.TitleBgColor != default ? style.TitleBgColor : currentStyle.Colors[(int)ImGuiCol.TitleBg];
+            currentStyle.Colors[(int)ImGuiCol.TitleBgActive] = style.TitleBgActiveColor != default ? style.TitleBgActiveColor : currentStyle.Colors[(int)ImGuiCol.TitleBgActive];
+            currentStyle.Colors[(int)ImGuiCol.TitleBgCollapsed] = style.TitleBgCollapsedColor != default ? style.TitleBgCollapsedColor : currentStyle.Colors[(int)ImGuiCol.TitleBgCollapsed];
+            currentStyle.Colors[(int)ImGuiCol.MenuBarBg] = style.MenuBarBgColor != default ? style.MenuBarBgColor : currentStyle.Colors[(int)ImGuiCol.MenuBarBg];
+            currentStyle.Colors[(int)ImGuiCol.ScrollbarBg] = style.ScrollbarBgColor != default ? style.ScrollbarBgColor : currentStyle.Colors[(int)ImGuiCol.ScrollbarBg];
+            currentStyle.Colors[(int)ImGuiCol.ScrollbarGrab] = style.ScrollbarGrabColor != default ? style.ScrollbarGrabColor : currentStyle.Colors[(int)ImGuiCol.ScrollbarGrab];
+            currentStyle.Colors[(int)ImGuiCol.ScrollbarGrabHovered] = style.ScrollbarGrabHoveredColor != default ? style.ScrollbarGrabHoveredColor : currentStyle.Colors[(int)ImGuiCol.ScrollbarGrabHovered];
+            currentStyle.Colors[(int)ImGuiCol.ScrollbarGrabActive] = style.ScrollbarGrabActiveColor != default ? style.ScrollbarGrabActiveColor : currentStyle.Colors[(int)ImGuiCol.ScrollbarGrabActive];
+            currentStyle.Colors[(int)ImGuiCol.CheckMark] = style.CheckMarkColor != default ? style.CheckMarkColor : currentStyle.Colors[(int)ImGuiCol.CheckMark];
+            currentStyle.Colors[(int)ImGuiCol.SliderGrab] = style.SliderGrabColor != default ? style.SliderGrabColor : currentStyle.Colors[(int)ImGuiCol.SliderGrab];
+            currentStyle.Colors[(int)ImGuiCol.SliderGrabActive] = style.SliderGrabActiveColor != default ? style.SliderGrabActiveColor : currentStyle.Colors[(int)ImGuiCol.SliderGrabActive];
+            currentStyle.Colors[(int)ImGuiCol.Button] = style.ButtonColor != default ? style.ButtonColor : currentStyle.Colors[(int)ImGuiCol.Button];
+            currentStyle.Colors[(int)ImGuiCol.ButtonHovered] = style.ButtonHoveredColor != default ? style.ButtonHoveredColor : currentStyle.Colors[(int)ImGuiCol.ButtonHovered];
+            currentStyle.Colors[(int)ImGuiCol.ButtonActive] = style.ButtonActiveColor != default ? style.ButtonActiveColor : currentStyle.Colors[(int)ImGuiCol.ButtonActive];
+            currentStyle.Colors[(int)ImGuiCol.Header] = style.HeaderColor != default ? style.HeaderColor : currentStyle.Colors[(int)ImGuiCol.Header];
+            currentStyle.Colors[(int)ImGuiCol.HeaderHovered] = style.HeaderHoveredColor != default ? style.HeaderHoveredColor : currentStyle.Colors[(int)ImGuiCol.HeaderHovered];
+            currentStyle.Colors[(int)ImGuiCol.HeaderActive] = style.HeaderActiveColor != default ? style.HeaderActiveColor : currentStyle.Colors[(int)ImGuiCol.HeaderActive];
+            currentStyle.Colors[(int)ImGuiCol.Separator] = style.SeparatorColor != default ? style.SeparatorColor : currentStyle.Colors[(int)ImGuiCol.Separator];
+            currentStyle.Colors[(int)ImGuiCol.SeparatorHovered] = style.SeparatorHoveredColor != default ? style.SeparatorHoveredColor : currentStyle.Colors[(int)ImGuiCol.SeparatorHovered];
+            currentStyle.Colors[(int)ImGuiCol.SeparatorActive] = style.SeparatorActiveColor != default ? style.SeparatorActiveColor : currentStyle.Colors[(int)ImGuiCol.SeparatorActive];
+            currentStyle.Colors[(int)ImGuiCol.ResizeGrip] = style.ResizeGripColor != default ? style.ResizeGripColor : currentStyle.Colors[(int)ImGuiCol.ResizeGrip];
+            currentStyle.Colors[(int)ImGuiCol.ResizeGripHovered] = style.ResizeGripHoveredColor != default ? style.ResizeGripHoveredColor : currentStyle.Colors[(int)ImGuiCol.ResizeGripHovered];
+            currentStyle.Colors[(int)ImGuiCol.ResizeGripActive] = style.ResizeGripActiveColor != default ? style.ResizeGripActiveColor : currentStyle.Colors[(int)ImGuiCol.ResizeGripActive];
+            currentStyle.Colors[(int)ImGuiCol.Tab] = style.TabColor != default ? style.TabColor : currentStyle.Colors[(int)ImGuiCol.Tab];
+            currentStyle.Colors[(int)ImGuiCol.TabHovered] = style.TabHoveredColor != default ? style.TabHoveredColor : currentStyle.Colors[(int)ImGuiCol.TabHovered];
+            currentStyle.Colors[(int)ImGuiCol.TabSelected] = style.TabSelectedColor != default ? style.TabSelectedColor : currentStyle.Colors[(int)ImGuiCol.TabSelected];
+            currentStyle.Colors[(int)ImGuiCol.TabSelectedOverline] = style.TabSelectedOverlineColor != default ? style.TabSelectedOverlineColor : currentStyle.Colors[(int)ImGuiCol.TabSelectedOverline];
+            currentStyle.Colors[(int)ImGuiCol.TabDimmed] = style.TabDimmedColor != default ? style.TabDimmedColor : currentStyle.Colors[(int)ImGuiCol.TabDimmed];
+            currentStyle.Colors[(int)ImGuiCol.TabDimmedSelected] = style.TabDimmedSelectedColor != default ? style.TabDimmedSelectedColor : currentStyle.Colors[(int)ImGuiCol.TabDimmedSelected];
+            currentStyle.Colors[(int)ImGuiCol.TabDimmedSelectedOverline] = style.TabDimmedSelectedOverlineColor != default ? style.TabDimmedSelectedOverlineColor : currentStyle.Colors[(int)ImGuiCol.TabDimmedSelectedOverline];
+            currentStyle.Colors[(int)ImGuiCol.DockingPreview] = style.DockingPreviewColor != default ? style.DockingPreviewColor : currentStyle.Colors[(int)ImGuiCol.DockingPreview];
+            currentStyle.Colors[(int)ImGuiCol.DockingEmptyBg] = style.DockingEmptyBgColor != default ? style.DockingEmptyBgColor : currentStyle.Colors[(int)ImGuiCol.DockingEmptyBg];
+            currentStyle.Colors[(int)ImGuiCol.PlotLines] = style.PlotLinesColor != default ? style.PlotLinesColor : currentStyle.Colors[(int)ImGuiCol.PlotLines];
+            currentStyle.Colors[(int)ImGuiCol.PlotLinesHovered] = style.PlotLinesHoveredColor != default ? style.PlotLinesHoveredColor : currentStyle.Colors[(int)ImGuiCol.PlotLinesHovered];
+            currentStyle.Colors[(int)ImGuiCol.PlotHistogram] = style.PlotHistogramColor != default ? style.PlotHistogramColor : currentStyle.Colors[(int)ImGuiCol.PlotHistogram];
+            currentStyle.Colors[(int)ImGuiCol.PlotHistogramHovered] = style.PlotHistogramHoveredColor != default ? style.PlotHistogramHoveredColor : currentStyle.Colors[(int)ImGuiCol.PlotHistogramHovered];
+            currentStyle.Colors[(int)ImGuiCol.TableHeaderBg] = style.TableHeaderBgColor != default ? style.TableHeaderBgColor : currentStyle.Colors[(int)ImGuiCol.TableHeaderBg];
+            currentStyle.Colors[(int)ImGuiCol.TableBorderStrong] = style.TableBorderStrongColor != default ? style.TableBorderStrongColor : currentStyle.Colors[(int)ImGuiCol.TableBorderStrong];
+            currentStyle.Colors[(int)ImGuiCol.TableBorderLight] = style.TableBorderLightColor != default ? style.TableBorderLightColor : currentStyle.Colors[(int)ImGuiCol.TableBorderLight];
+            currentStyle.Colors[(int)ImGuiCol.TableRowBg] = style.TableRowBgColor != default ? style.TableRowBgColor : currentStyle.Colors[(int)ImGuiCol.TableRowBg];
+            currentStyle.Colors[(int)ImGuiCol.TableRowBgAlt] = style.TableRowBgAltColor != default ? style.TableRowBgAltColor : currentStyle.Colors[(int)ImGuiCol.TableRowBgAlt];
+            currentStyle.Colors[(int)ImGuiCol.TextLink] = style.TextLinkColor != default ? style.TextLinkColor : currentStyle.Colors[(int)ImGuiCol.TextLink];
+            currentStyle.Colors[(int)ImGuiCol.TextSelectedBg] = style.TextSelectedBgColor != default ? style.TextSelectedBgColor : currentStyle.Colors[(int)ImGuiCol.TextSelectedBg];
+            currentStyle.Colors[(int)ImGuiCol.DragDropTarget] = style.DragDropTargetColor != default ? style.DragDropTargetColor : currentStyle.Colors[(int)ImGuiCol.DragDropTarget];
+            currentStyle.Colors[(int)ImGuiCol.NavCursor] = style.NavCursorColor != default ? style.NavCursorColor : currentStyle.Colors[(int)ImGuiCol.NavCursor];
+            currentStyle.Colors[(int)ImGuiCol.NavWindowingHighlight] = style.NavWindowingHighlightColor != default ? style.NavWindowingHighlightColor : currentStyle.Colors[(int)ImGuiCol.NavWindowingHighlight];
+            currentStyle.Colors[(int)ImGuiCol.NavWindowingDimBg] = style.NavWindowingDimBgColor != default ? style.NavWindowingDimBgColor : currentStyle.Colors[(int)ImGuiCol.NavWindowingDimBg];
+            currentStyle.Colors[(int)ImGuiCol.ModalWindowDimBg] = style.ModalWindowDimBgColor != default ? style.ModalWindowDimBgColor : currentStyle.Colors[(int)ImGuiCol.ModalWindowDimBg];
         }
 
         /// <summary>
@@ -389,25 +570,41 @@ namespace ImGuiUnityEditor
             }
         }
 
+        /// <summary>
+        /// Render function with proper DPI-aware clipping and ImGui 1.92 texture handling
+        /// </summary>
         private void RenderImGuiDrawData(ImDrawDataPtr drawData)
         {
             UpdateBuffers(drawData);
+
+            if (drawData.Textures.Size > 0)
+            {
+                for (int i = 0; i < drawData.Textures.Size; i++)
+                {
+                    var tex = drawData.Textures[i];
+                    if (tex.Status != ImTextureStatus.Ok)
+                    {
+                        UpdateTexture(tex);
+                    }
+                }
+            }
 
             _cmd.Clear();
             _cmd.SetRenderTarget(_renderTexture);
             _cmd.ClearRenderTarget(true, true, new Color(0, 0, 0, 0));
 
-            float dpiScale = IO.DisplayFramebufferScale.x;
-            Vector2 fbSize = IO.DisplaySize;
-            int width = Mathf.RoundToInt(fbSize.x * dpiScale);
-            int height = Mathf.RoundToInt(fbSize.y * dpiScale);
+            Vector2 fbSize = drawData.DisplaySize;
+            Vector2 fbScale = drawData.FramebufferScale;
+            int fbWidth = Mathf.RoundToInt(fbSize.x * fbScale.x);
+            int fbHeight = Mathf.RoundToInt(fbSize.y * fbScale.y);
 
-            _cmd.SetViewport(new Rect(0, 0, width, height));
+            _cmd.SetViewport(new Rect(0, 0, fbWidth, fbHeight));
             _cmd.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.Ortho(0f, fbSize.x, fbSize.y, 0f, 0f, 1f));
 
             _material.SetBuffer(_vertexProperty, _vertexBuffer);
 
-            Vector4 clipOffset = new(drawData.DisplayPos.x, drawData.DisplayPos.y, drawData.DisplayPos.x, drawData.DisplayPos.y);
+            Vector2 clipOff = drawData.DisplayPos;
+            Vector2 clipScale = drawData.FramebufferScale;
 
             int vtxOffset = 0;
             int argOffset = 0;
@@ -420,20 +617,27 @@ namespace ImGuiUnityEditor
                 {
                     var drawCmd = drawList.CmdBuffer[i];
 
-                    Vector4 clipSize = drawCmd.ClipRect - clipOffset;
+                    Vector2 clipMin = new(
+                        (drawCmd.ClipRect.x - clipOff.x) * clipScale.x,
+                        (drawCmd.ClipRect.y - clipOff.y) * clipScale.y
+                    );
+                    Vector2 clipMax = new(
+                        (drawCmd.ClipRect.z - clipOff.x) * clipScale.x,
+                        (drawCmd.ClipRect.w - clipOff.y) * clipScale.y
+                    );
 
-                    if (clipSize.x >= fbSize.x || clipSize.y >= fbSize.y || clipSize.z < 0f || clipSize.w < 0f)
+                    if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
                         continue;
 
-                    var texture = Resources.InstanceIDToObject((int)drawCmd.TextureId.Handle) as Texture;
+                    var texture = Resources.InstanceIDToObject((int)drawCmd.GetTexID().Handle) as Texture;
                     _materialPropertyBlock.SetTexture(_textureProperty, texture);
                     _materialPropertyBlock.SetInt(_baseVertexProperty, vtxOffset + (int)drawCmd.VtxOffset);
 
                     Rect scissorRect = new(
-                        clipSize.x * dpiScale,
-                        (fbSize.y - clipSize.w) * dpiScale,
-                        (clipSize.z - clipSize.x) * dpiScale,
-                        (clipSize.w - clipSize.y) * dpiScale
+                        clipMin.x,
+                        fbHeight - clipMax.y,
+                        clipMax.x - clipMin.x,
+                        clipMax.y - clipMin.y
                     );
 
                     _cmd.EnableScissorRect(scissorRect);
@@ -444,7 +648,6 @@ namespace ImGuiUnityEditor
             }
 
             _cmd.DisableScissorRect();
-
             Graphics.ExecuteCommandBuffer(_cmd);
         }
 
@@ -470,13 +673,6 @@ namespace ImGuiUnityEditor
                     _material = null;
                 }
 
-                //* Release font texture
-                if (_fontTexture != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(_fontTexture);
-                    _fontTexture = null;
-                }
-
                 //* Release render texture
                 if (_renderTexture != null)
                 {
@@ -484,6 +680,18 @@ namespace ImGuiUnityEditor
                     UnityEngine.Object.DestroyImmediate(_renderTexture);
                     _renderTexture = null;
                 }
+
+
+                // Destroy all managed textures (matches official OpenGL backend)
+                // var platformTextures = ImGui.GetPlatformIO().Textures;
+                // for (int i = 0; i < platformTextures.Size; i++)
+                // {
+                //     var tex = platformTextures[i];
+                //     if (tex.RefCount == 1)
+                //     {
+                //         DestroyTexture(tex);
+                //     }
+                // }
 
                 //* Release ImPlot context
                 ImPlot.SetCurrentContext(null);

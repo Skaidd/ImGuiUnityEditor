@@ -141,6 +141,9 @@ namespace ImGuiUnityEditor
         public unsafe void LoadAllFonts()
         {
             IO.Fonts.AddFontDefault();
+            var defaultFontPath = System.IO.Path.GetFullPath("Packages/com.unity.imguiunityeditor/Resources/Inter-Variable.ttf");
+            IO.Fonts.AddFontFromFileTTF(defaultFontPath, 16);
+            
             var fontAssets = Resources.LoadAll<Font>("");
             foreach (var fontAsset in fontAssets)
             {

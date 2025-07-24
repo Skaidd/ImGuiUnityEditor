@@ -5,6 +5,7 @@ using UnityEngine.Rendering;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
 using UnityEditor;
+using System.Runtime.CompilerServices;
 
 namespace ImGuiUnityEditor
 {
@@ -31,7 +32,7 @@ namespace ImGuiUnityEditor
         private double _lastTime = 0;
 
         // Rendering resources
-        private readonly CommandBuffer _cmd;
+        private CommandBuffer _cmd;
         private Material _material;
         private readonly MaterialPropertyBlock _materialPropertyBlock;
         private RenderTexture _renderTexture;
@@ -110,15 +111,15 @@ namespace ImGuiUnityEditor
                 IO.ConfigErrorRecoveryEnableAssert = false;
                 IO.ConfigErrorRecoveryEnableTooltip = true;
 
-                //* Set Initial display size
-                IO.DisplaySize = new(1, 1);
+                // //* Set Initial display size
+                // IO.DisplaySize = new(1, 1);
 
                 //* Disable ImGui's automatic INI file handling and log file handling
                 var io = ImGui.GetIO();
                 io.IniFilename = (byte*)IntPtr.Zero;
                 io.LogFilename = (byte*)IntPtr.Zero;
 
-                SetupFonts();
+                LoadAllFonts();
             }
             catch (Exception e)
             {
@@ -128,103 +129,56 @@ namespace ImGuiUnityEditor
         }
 
         /// <summary>
-        /// Sets up the fonts
-        /// </summary>
-        private unsafe void SetupFonts()
-        {
-            LoadAllFonts();
-        }
-
-        /// <summary>
         /// Loads all fonts
         /// </summary>
-        public unsafe void LoadAllFonts()
+        public unsafe void LoadAllFonts([CallerFilePath] string sourceFilePath = "")
         {
-            IO.Fonts.AddFontDefault();
-            var defaultFontPath = System.IO.Path.GetFullPath("Packages/com.unity.imguiunityeditor/Resources/Inter-Variable.ttf");
-            IO.Fonts.AddFontFromFileTTF(defaultFontPath, 16);
-            
-            var fontAssets = Resources.LoadAll<Font>("");
-            foreach (var fontAsset in fontAssets)
+            string scriptDirectory = System.IO.Path.GetDirectoryName(sourceFilePath);
+            string fontsDirectory = System.IO.Path.Combine(scriptDirectory, "Resources");
+
+            var builtInFonts = new[]
             {
-                var fontPath = AssetDatabase.GetAssetPath(fontAsset);
-                IO.Fonts.AddFontFromFileTTF(fontPath, fontAsset.fontSize);
-            }
-        }
+                (name: "Inter-Variable.ttf", mergeMode: false),
+                (name: "codicon.ttf", mergeMode: true),
+                (name: "lucide.ttf", mergeMode: true),
+                (name: "MaterialIcons-Regular.ttf", mergeMode: true),
+                (name: "fontaudio.ttf", mergeMode: true),
+                (name: "seguiemj.ttf", mergeMode: true),
+                (name: "NotoSansJP-Regular.ttf", mergeMode: true)
+            };
 
-        /// <summary>
-        /// Updates texture data
-        /// </summary>
-        private unsafe void UpdateTexture(ImTextureDataPtr tex)
-        {
-            if (tex.Status == ImTextureStatus.WantCreate)
+            var builtInFontConfig = new ImFontConfig
             {
-                var unityTexture = new Texture2D(tex.Width, tex.Height, TextureFormat.RGBA32, false, true);
-                unityTexture.filterMode = FilterMode.Bilinear;
-                unityTexture.wrapMode = TextureWrapMode.Clamp;
-                unityTexture.anisoLevel = 1;
-#if UNITY_EDITOR
-                unityTexture.hideFlags = HideFlags.HideAndDontSave;
-#endif
+                MergeMode = 1,
+                RasterizerDensity = 1,
+                RasterizerMultiply = 1,
+                GlyphMinAdvanceX = 0,
+                GlyphMaxAdvanceX = 13,
+                FontLoaderFlags = (uint)ImGuiFreeTypeLoaderFlags.LoadColor,
+            };
 
-                var pixels = tex.GetPixels();
-                byte[] data = new byte[tex.Width * tex.Height * tex.BytesPerPixel];
-                Marshal.Copy((IntPtr)pixels, data, 0, data.Length);
-
-                unityTexture.LoadRawTextureData(data);
-                unityTexture.Apply(false);
-
-                tex.SetTexID(new ImTextureID(unityTexture.GetInstanceID()));
-                tex.SetStatus(ImTextureStatus.Ok);
-            }
-            else if (tex.Status == ImTextureStatus.WantUpdates)
+            foreach (var (name, mergeMode) in builtInFonts)
             {
-                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
-                if (unityTexture != null)
+                string fontPath = System.IO.Path.Combine(fontsDirectory, name);
+
+                if (System.IO.File.Exists(fontPath))
                 {
-                    var updates = tex.Updates;
-                    for (int i = 0; i < updates.Size; i++)
-                    {
-                        var r = updates[i];
-
-                        int srcPitch = r.W * tex.BytesPerPixel;
-                        byte[] regionData = new byte[r.H * srcPitch];
-
-                        for (int y = 0; y < r.H; y++)
-                        {
-                            var rowPixels = tex.GetPixelsAt(r.X, r.Y + y);
-                            Marshal.Copy((IntPtr)rowPixels, regionData, y * srcPitch, srcPitch);
-                        }
-
-                        var colors = new Color32[r.W * r.H];
-                        for (int j = 0; j < colors.Length; j++)
-                        {
-                            int idx = j * 4;
-                            colors[j] = new Color32(
-                                regionData[idx],     
-                                regionData[idx + 1], 
-                                regionData[idx + 2], 
-                                regionData[idx + 3] 
-                            );
-                        }
-
-                        unityTexture.SetPixels32(r.X, r.Y, r.W, r.H, colors);
-                    }
-
-                    unityTexture.Apply(false);
-                    tex.SetStatus(ImTextureStatus.Ok);
+                    if (mergeMode)
+                        IO.Fonts.AddFontFromFileTTF(fontPath, 16, ref builtInFontConfig);
+                    else
+                        IO.Fonts.AddFontFromFileTTF(fontPath, 16);
+                }
+                else
+                {
+                    Debug.LogWarning($"Built-in font not found: {fontPath}");
                 }
             }
-            else if (tex.Status == ImTextureStatus.WantDestroy && tex.UnusedFrames > 0)
-            {
-                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
-                if (unityTexture != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(unityTexture);
-                }
 
-                tex.SetTexID(new ImTextureID(0));
-                tex.SetStatus(ImTextureStatus.Destroyed);
+            var customFonts = Resources.LoadAll<Font>("ImguiEditorFonts");
+            foreach (var font in customFonts)
+            {
+                var fontPath = AssetDatabase.GetAssetPath(font);
+                IO.Fonts.AddFontFromFileTTF(fontPath, 16);
             }
         }
 
@@ -233,13 +187,21 @@ namespace ImGuiUnityEditor
         /// </summary>
         public void SetupContext()
         {
-            ImGui.SetCurrentContext(_imGuiContext);
-            ImPlot.SetCurrentContext(_imPlotContext);
-            ImNodes.SetCurrentContext(_imNodesContext);
+            try
+            {
+                ImGui.SetCurrentContext(_imGuiContext);
+                ImPlot.SetCurrentContext(_imPlotContext);
+                ImNodes.SetCurrentContext(_imNodesContext);
 
-            ImPlot.SetImGuiContext(_imGuiContext);
-            ImNodes.SetImGuiContext(_imGuiContext);
-            ImGuizmo.SetImGuiContext(_imGuiContext);
+                ImPlot.SetImGuiContext(_imGuiContext);
+                ImNodes.SetImGuiContext(_imGuiContext);
+                ImGuizmo.SetImGuiContext(_imGuiContext);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error setting up ImGui context: {e.Message}\n{e.StackTrace}");
+            }
+
         }
 
         /// <summary>
@@ -255,7 +217,7 @@ namespace ImGuiUnityEditor
         /// <summary>
         /// Sets the input handler.
         /// </summary>
-        /// <param name="inputHandler">The input handler.</param>
+        /// <param name="inputHandler">The input handler to set.</param>
         public void SetInputHandler(ImGuiRendererInputHandler inputHandler)
         {
             InputHandler = inputHandler;
@@ -263,44 +225,55 @@ namespace ImGuiUnityEditor
         }
 
         /// <summary>
-        /// Resizes the ImGui display with proper DPI handling
+        /// Resizes ImGui display with proper DPI handling
         /// </summary>
-        /// <param name="size">The logical size (not physical pixels)</param>
+        /// <param name="size">The logical size.</param>
         private void Resize(Vector2 size)
         {
-            if (size.x >= 0 && size.y >= 0)
+            try
             {
+                if (size.x >= 0 && size.y >= 0)
+                {
 #if UNITY_EDITOR
-                float dpiScale = UnityEditor.EditorGUIUtility.pixelsPerPoint;
+                    float dpiScale = UnityEditor.EditorGUIUtility.pixelsPerPoint;
 #else
                 float dpiScale = Screen.dpi / 96.0f;
 #endif
 
-                IO.DisplaySize = size;
+                    IO.DisplaySize = size;
 
-                IO.DisplayFramebufferScale = new Vector2(dpiScale, dpiScale);
+                    IO.DisplayFramebufferScale = new Vector2(dpiScale, dpiScale);
 
-                int physicalWidth = Mathf.RoundToInt(size.x * dpiScale);
-                int physicalHeight = Mathf.RoundToInt(size.y * dpiScale);
+                    int physicalWidth = Mathf.RoundToInt(size.x * dpiScale);
+                    int physicalHeight = Mathf.RoundToInt(size.y * dpiScale);
 
-                if (_renderTexture != null &&
-                    (_renderTexture.width != physicalWidth || _renderTexture.height != physicalHeight))
-                {
-                    _renderTexture.Release();
-                    _renderTexture.width = Mathf.Max(1, physicalWidth);
-                    _renderTexture.height = Mathf.Max(1, physicalHeight);
-                    _renderTexture.Create();
+                    if (_renderTexture != null &&
+                        (_renderTexture.width != physicalWidth || _renderTexture.height != physicalHeight))
+                    {
+                        _renderTexture.Release();
+                        _renderTexture.width = Mathf.Max(1, physicalWidth);
+                        _renderTexture.height = Mathf.Max(1, physicalHeight);
+                        _renderTexture.Create();
+                    }
                 }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error resizing ImGui display: {e.Message}\n{e.StackTrace}");
             }
         }
 
         /// <summary>
         /// Begins a new ImGui frame.
         /// </summary>
-        private void BeginFrame()
+        /// <param name="size">The logical size of ImGui display.</param>
+        private void Begin(Vector2 size)
         {
+            SetupContext();
+            Resize(size);
+
 #if UNITY_EDITOR
-            double time = UnityEditor.EditorApplication.timeSinceStartup;
+            double time = EditorApplication.timeSinceStartup;
 #else
             double time = Time.realtimeSinceStartup;
 #endif
@@ -308,8 +281,15 @@ namespace ImGuiUnityEditor
             IO.DeltaTime = (float)deltaTime;
             _lastTime = time;
 
-            ImGui.NewFrame();
-            ImGuizmo.BeginFrame();
+            try
+            {
+                ImGui.NewFrame();
+                ImGuizmo.BeginFrame();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error beginning ImGui frame: {e.Message}\n{e.StackTrace}");
+            }
 
             InputHandler?.UpdateInput();
         }
@@ -317,31 +297,64 @@ namespace ImGuiUnityEditor
         /// <summary>
         /// Ends the ImGui frame and renders the draw data.
         /// </summary>
-        private RenderTexture EndFrame()
+        /// <returns>RenderTexture.</returns>
+        private RenderTexture End()
         {
-            ImGui.Render();
-            RenderImGuiDrawData(ImGui.GetDrawData());
+            try
+            {
+                ImGui.Render();
+                RenderImGuiDrawData(ImGui.GetDrawData());
+                return _renderTexture;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error ending ImGui frame: {e.Message}\n{e.StackTrace}");
+                return _renderTexture;
+            }
+        }
+
+        /// <summary>
+        /// Renders ImGui frame.
+        /// </summary>
+        /// <param name="size">The logical size of ImGui display.</param>
+        /// <param name="draw">The action to draw ImGui content.</param>
+        /// <returns>RenderTexture.</returns>
+        public unsafe RenderTexture Render(Vector2 size, Action draw)
+        {
+            IO.ConfigErrorRecoveryEnableAssert = false;
+
+            Begin(size);
+
+            try
+            {
+                draw();
+            }
+            catch (Exception e)
+            {
+                string stackTrace = e.StackTrace.Split('\n')[0].Trim();
+                string errorMessage = $"{e.Message}\n{stackTrace}";
+                Debug.LogError(errorMessage);
+
+                ImGuiP.ErrorLog(e.Message);
+                ImGuiP.BeginErrorTooltip();
+                if (ImGui.TextLink(stackTrace))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(stackTrace, @" in (.*):(\d+)");
+                    if (match.Success)
+                    {
+                        var filePath = match.Groups[1].Value;
+                        var lineNumber = int.Parse(match.Groups[2].Value);
+                        UnityEditorInternal.InternalEditorUtility.TryOpenErrorFileFromConsole(filePath, lineNumber, 0);
+                    }
+                }
+                ImGuiP.EndErrorTooltip();
+
+                ImGui.End();
+            }
+
+            End();
+
             return _renderTexture;
-        }
-
-        /// <summary>
-        /// Begins a new ImGui frame.
-        /// </summary>
-        /// <param name="size">The logical size of the ImGui display.</param>
-        public void Begin(Vector2 size)
-        {
-            SetupContext();
-            Resize(size);
-            BeginFrame();
-        }
-
-        /// <summary>
-        /// Ends the ImGui frame and renders the draw data.
-        /// </summary>
-        /// <returns>The render texture.</returns>
-        public RenderTexture End()
-        {
-            return EndFrame();
         }
 
         /// <summary>
@@ -366,12 +379,20 @@ namespace ImGuiUnityEditor
             ImGui.LoadIniSettingsFromMemory(iniData);
         }
 
+        /// <summary>
+        /// Sets the style.
+        /// </summary>
+        /// <typeparam name="T">The type of the style.</typeparam>
         public void SetStyle<T>() where T : ImGuiObjectStyle, new()
         {
             var style = new T();
             SetStyle(style);
         }
 
+        /// <summary>
+        /// Sets the style.
+        /// </summary>
+        /// <param name="style">The style to set.</param>
         public void SetStyle(ImGuiObjectStyle style)
         {
             var currentStyle = ImGui.GetStyle();
@@ -474,10 +495,6 @@ namespace ImGuiUnityEditor
             currentStyle.Colors[(int)ImGuiCol.ModalWindowDimBg] = style.ModalWindowDimBgColor != default ? style.ModalWindowDimBgColor : currentStyle.Colors[(int)ImGuiCol.ModalWindowDimBg];
         }
 
-        /// <summary>
-        /// Updates the graphics buffers with the draw data.
-        /// </summary>
-        /// <param name="drawData">The draw data to update the buffers with.</param>
         private unsafe void UpdateBuffers(ImDrawDataPtr drawData)
         {
             int totalVtxCount = drawData.TotalVtxCount;
@@ -519,18 +536,18 @@ namespace ImGuiUnityEditor
                 _vertexBuffer.SetData(vtxArray, 0, vtxOffset, vtxArray.Length);
                 _indexBuffer.SetData(idxArray, 0, idxOffset, idxArray.Length);
 
-                drawArgs[1] = 1;                           
-                drawArgs[3] = vtxOffset;                   
-                drawArgs[4] = 0;                           
+                drawArgs[1] = 1;
+                drawArgs[3] = vtxOffset;
+                drawArgs[4] = 0;
 
                 for (int i = 0; i < cmdList.CmdBuffer.Size; i++)
                 {
                     var cmd = cmdList.CmdBuffer[i];
-                    drawArgs[0] = (int)cmd.ElemCount;      
-                    drawArgs[2] = idxOffset + (int)cmd.IdxOffset; 
+                    drawArgs[0] = (int)cmd.ElemCount;
+                    drawArgs[2] = idxOffset + (int)cmd.IdxOffset;
 
                     _argsBuffer.SetData(drawArgs, 0, argsOffset, 5);
-                    argsOffset += 5;                       
+                    argsOffset += 5;
                 }
 
                 vtxOffset += vtxArray.Length;
@@ -538,9 +555,79 @@ namespace ImGuiUnityEditor
             }
         }
 
-        /// <summary>
-        /// Render function with proper DPI-aware clipping and ImGui 1.92 texture handling
-        /// </summary>
+        private unsafe void UpdateTexture(ImTextureDataPtr tex)
+        {
+            if (tex.Status == ImTextureStatus.WantCreate)
+            {
+                var unityTexture = new Texture2D(tex.Width, tex.Height, TextureFormat.RGBA32, false, true);
+                unityTexture.filterMode = FilterMode.Bilinear;
+                unityTexture.wrapMode = TextureWrapMode.Clamp;
+                unityTexture.anisoLevel = 1;
+#if UNITY_EDITOR
+                unityTexture.hideFlags = HideFlags.HideAndDontSave;
+#endif
+
+                var pixels = tex.GetPixels();
+                byte[] data = new byte[tex.Width * tex.Height * tex.BytesPerPixel];
+                Marshal.Copy((IntPtr)pixels, data, 0, data.Length);
+
+                unityTexture.LoadRawTextureData(data);
+                unityTexture.Apply(false);
+
+                tex.SetTexID(new ImTextureID(unityTexture.GetInstanceID()));
+                tex.SetStatus(ImTextureStatus.Ok);
+            }
+            else if (tex.Status == ImTextureStatus.WantUpdates)
+            {
+                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
+                if (unityTexture != null)
+                {
+                    var updates = tex.Updates;
+                    for (int i = 0; i < updates.Size; i++)
+                    {
+                        var r = updates[i];
+
+                        int srcPitch = r.W * tex.BytesPerPixel;
+                        byte[] regionData = new byte[r.H * srcPitch];
+
+                        for (int y = 0; y < r.H; y++)
+                        {
+                            var rowPixels = tex.GetPixelsAt(r.X, r.Y + y);
+                            Marshal.Copy((IntPtr)rowPixels, regionData, y * srcPitch, srcPitch);
+                        }
+
+                        var colors = new Color32[r.W * r.H];
+                        for (int j = 0; j < colors.Length; j++)
+                        {
+                            int idx = j * 4;
+                            colors[j] = new Color32(
+                                regionData[idx],
+                                regionData[idx + 1],
+                                regionData[idx + 2],
+                                regionData[idx + 3]
+                            );
+                        }
+
+                        unityTexture.SetPixels32(r.X, r.Y, r.W, r.H, colors);
+                    }
+
+                    unityTexture.Apply(false);
+                    tex.SetStatus(ImTextureStatus.Ok);
+                }
+            }
+            else if (tex.Status == ImTextureStatus.WantDestroy && tex.UnusedFrames > 0)
+            {
+                var unityTexture = Resources.InstanceIDToObject((int)tex.TexID.Handle) as Texture2D;
+                if (unityTexture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(unityTexture);
+                }
+
+                tex.SetTexID(new ImTextureID(0));
+                tex.SetStatus(ImTextureStatus.Destroyed);
+            }
+        }
+
         private void RenderImGuiDrawData(ImDrawDataPtr drawData)
         {
             UpdateBuffers(drawData);
@@ -628,11 +715,15 @@ namespace ImGuiUnityEditor
             {
                 //* Release command buffer  
                 _cmd?.Release();
+                _cmd = null;
 
                 //* Release graphics buffers
                 _vertexBuffer?.Release();
                 _indexBuffer?.Release();
                 _argsBuffer?.Release();
+                _vertexBuffer = null;
+                _indexBuffer = null;
+                _argsBuffer = null;
 
                 //* Release material
                 if (_material != null)
@@ -653,11 +744,13 @@ namespace ImGuiUnityEditor
                 ImPlot.SetCurrentContext(null);
                 ImPlot.SetImGuiContext(null);
                 ImPlot.DestroyContext(_imPlotContext);
+                _imPlotContext = null;
 
                 //* Release ImNodes context
                 ImNodes.SetCurrentContext(null);
                 ImNodes.SetImGuiContext(null);
                 ImNodes.DestroyContext(_imNodesContext);
+                _imNodesContext = null;
 
                 //* Release ImGuizmo context
                 ImGuizmo.SetImGuiContext(null);
@@ -665,6 +758,7 @@ namespace ImGuiUnityEditor
                 //* Release ImGui context
                 ImGui.SetCurrentContext(null);
                 ImGui.DestroyContext(_imGuiContext);
+                _imGuiContext = null;
             }
             catch (Exception e)
             {

@@ -38,7 +38,7 @@ namespace ImGuiUnityEditor
         /// The ImGui renderer instance.
         /// </summary>
         private ImGuiRenderer _renderer;
-        
+
         public ImGuiRendererContainer()
         {
             this.style.position = Position.Absolute;
@@ -58,7 +58,7 @@ namespace ImGuiUnityEditor
                 _renderer.SetStyle<ImGuiDarkStyle>();
             else
                 _renderer.SetStyle<ImGuiLightStyle>();
-            
+
             OnStart?.Invoke();
         }
 
@@ -74,7 +74,7 @@ namespace ImGuiUnityEditor
             }
             finally
             {
-                _renderer.Dispose();
+                _renderer?.Dispose();
                 _renderer = null;
             }
         }
@@ -107,11 +107,12 @@ namespace ImGuiUnityEditor
             || float.IsNaN(contentRect.size.x)
             || float.IsNaN(contentRect.size.y)) { return; }
 
-            _renderer.Begin(new Vector2(contentRect.size.x, contentRect.size.y));
-            BeforeDraw?.Invoke();
-            OnDraw?.Invoke();
-            AfterDraw?.Invoke();
-            var renderTexture = _renderer.End();
+            var renderTexture = _renderer.Render(new Vector2(contentRect.size.x, contentRect.size.y), () =>
+            {
+                BeforeDraw?.Invoke();
+                OnDraw?.Invoke();
+                AfterDraw?.Invoke();
+            });
 
             style.backgroundImage = Background.FromRenderTexture(renderTexture);
         }
